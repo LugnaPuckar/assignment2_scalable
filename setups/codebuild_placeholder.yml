@@ -1,0 +1,95 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Setup CodeBuild Project for DockerDemo
+
+Parameters:
+  RepositoryName:
+    Type: String
+    Default: dockerdemo
+    Description: The name of the CodeCommit repository
+
+  BranchName:
+    Type: String
+    Default: main
+    Description: The branch of the CodeCommit repository
+
+  ProjectName:
+    Type: String
+    Default: BuildDockerDemo
+    Description: The name of the CodeBuild project
+
+Resources:
+  CodeBuildServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: codebuild-BuildDockerDemo-service-role
+      AssumeRolePolicyDocument: 
+        Version: "2012-10-17"
+        Statement: 
+          - Effect: "Allow"
+            Principal: 
+              Service: 
+                - "codebuild.amazonaws.com"
+            Action: 
+              - "sts:AssumeRole"
+      Path: "/"
+      Policies: 
+        - PolicyName: "CodeBuildPolicy"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: "Allow"
+                Resource:
+                  - "arn:aws:logs:eu-west-1:%AWS_ID_PLACEHOLDER%:log-group:/aws/codebuild/BuildDockerDemo"
+                  - "arn:aws:logs:eu-west-1:%AWS_ID_PLACEHOLDER%:log-group:/aws/codebuild/BuildDockerDemo:*"
+                Action:
+                  - "logs:CreateLogGroup"
+                  - "logs:CreateLogStream"
+                  - "logs:PutLogEvents"
+              - Effect: "Allow"
+                Resource:
+                  - "arn:aws:s3:::codepipeline-eu-west-1-*"
+                Action:
+                  - "s3:PutObject"
+                  - "s3:GetObject"
+                  - "s3:GetObjectVersion"
+                  - "s3:GetBucketAcl"
+                  - "s3:GetBucketLocation"
+              - Effect: "Allow"
+                Resource:
+                  - "arn:aws:codecommit:eu-west-1:%AWS_ID_PLACEHOLDER%:dockerdemo"
+                Action:
+                  - "codecommit:GitPull"
+              - Effect: "Allow"
+                Action:
+                  - "codebuild:CreateReportGroup"
+                  - "codebuild:CreateReport"
+                  - "codebuild:UpdateReport"
+                  - "codebuild:BatchPutTestCases"
+                  - "codebuild:BatchPutCodeCoverages"
+                Resource:
+                  - "arn:aws:codebuild:eu-west-1:%AWS_ID_PLACEHOLDER%:report-group/BuildDockerDemo-*"
+
+  CodeBuildProject:
+    Type: AWS::CodeBuild::Project
+    Properties: 
+      Name: !Ref ProjectName
+      Source: 
+        Type: CODECOMMIT
+        Location: 
+          Fn::Join: 
+            - ""
+            - - "https://git-codecommit."
+              - !Ref "AWS::Region"
+              - ".amazonaws.com/v1/repos/"
+              - !Ref RepositoryName
+        BuildSpec: "buildspec.yml"
+        GitCloneDepth: 1
+      SourceVersion: !Sub 'refs/heads/${BranchName}'
+      Environment: 
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: "aws/codebuild/standard:7.0"
+        Type: LINUX_CONTAINER
+        PrivilegedMode: true
+      ServiceRole: !GetAtt CodeBuildServiceRole.Arn
+      Artifacts: 
+        Type: NO_ARTIFACTS
